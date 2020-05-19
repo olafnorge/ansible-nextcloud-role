@@ -1,0 +1,56 @@
+---
+- name: assert required variables are set and have reasonable values
+  assert:
+    that:
+      - (nextcloud_olafnorge_de_labels | length) > 0
+      - (nextcloud_olafnorge_de_network_definitions | length) > 0
+      - (nextcloud_olafnorge_de_networks | length) > 0
+      - nextcloud_olafnorge_de_environment is defined
+      - nextcloud_olafnorge_de_environment.db_password is defined
+      - (nextcloud_olafnorge_de_environment.db_password | length) > 0
+      - nextcloud_olafnorge_de_environment.db_root_password is defined
+      - (nextcloud_olafnorge_de_environment.db_root_password | length) > 0
+      - nextcloud_olafnorge_de_environment.instance_id is defined
+      - (nextcloud_olafnorge_de_environment.instance_id | length) > 0
+      - nextcloud_olafnorge_de_environment.mail_smtp_password is defined
+      - (nextcloud_olafnorge_de_environment.mail_smtp_password | length) > 0
+      - nextcloud_olafnorge_de_environment.password_salt is defined
+      - (nextcloud_olafnorge_de_environment.password_salt | length) > 0
+      - nextcloud_olafnorge_de_environment.secret is defined
+      - (nextcloud_olafnorge_de_environment.secret | length) > 0
+
+- name: create secrets for nextcloud.example.com
+  docker_secret:
+    data: "{{ item.value.data }}"
+    name: "{{ item.value.name }}"
+    state: present
+  no_log: yes
+  with_dict: "{{ nextcloud_olafnorge_de_secrets }}"
+  when: nextcloud_olafnorge_de_use_secrets
+
+- name: write nextcloud config skeleton
+  template:
+    backup: yes
+    dest: "{{ nextcloud_olafnorge_de_config_path }}"
+    mode: 0600
+    src: config.php.j2
+  register: nextcloud_olafnorge_de_config_templated
+
+- name: write crontab skeleton
+  template:
+    dest: "{{ nextcloud_olafnorge_de_crontab_path }}"
+    mode: 0600
+    src: crontab.j2
+  register: nextcloud_olafnorge_de_crontab_templated
+
+- name: register dynamic name of config and crontab skeleton
+  set_fact:
+    nextcloud_olafnorge_de_config_dict: "{'nextcloud-config-{{ nextcloud_olafnorge_de_config_templated.checksum[:10] }}':{'file':'{{ nextcloud_olafnorge_de_config_path }}'},'nextcloud-crontab-{{ nextcloud_olafnorge_de_crontab_templated.checksum[:10] }}':{'file':'{{ nextcloud_olafnorge_de_crontab_path }}'}}"
+
+- name: spawn nextcloud.example.com service
+  docker_stack:
+    compose:
+      - "{{ nextcloud_olafnorge_de_compose }}"
+    name: "{{ nextcloud_olafnorge_de_name }}"
+    prune: yes
+    state: present

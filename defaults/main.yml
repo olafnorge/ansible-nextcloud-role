@@ -1,0 +1,203 @@
+---
+nextcloud_olafnorge_de_compose:
+  version: "3.7"
+  services:
+    nextcloud:
+      configs:
+        - source: "nextcloud-config-{{ nextcloud_olafnorge_de_config_templated.checksum[:10] }}"
+          target: "{{ nextcloud_olafnorge_de_environment.config_file_path }}"
+          uid: '82'
+          gid: '82'
+          mode: 0440
+      deploy:
+        labels: "{{ nextcloud_olafnorge_de_labels }}"
+        placement:
+          constraints:
+            - node.role != manager
+        replicas: 1
+        restart_policy:
+          condition: on-failure
+          delay: 5s
+          max_attempts: 5
+          window: 300s
+        update_config:
+          failure_action: rollback
+          monitor: 120s
+      environment:
+        ADMIN_USER: "{{ nextcloud_olafnorge_de_environment.admin_user | default('admin') }}"
+        ADMIN_PASS: "{{ nextcloud_olafnorge_de_environment.admin_pass | default('secret') }}"
+        CONFIG_FILE_PATH: "{{ nextcloud_olafnorge_de_environment.config_file_path }}"
+        DBHOST: "{{ nextcloud_olafnorge_de_environment.db_host | default('database') }}"
+        DBPASSWORD: "{{ nextcloud_olafnorge_de_environment.db_password }}"
+        DBPORT: "{{ nextcloud_olafnorge_de_environment.db_port | default('3306') }}"
+        HOME: "{{ nextcloud_olafnorge_de_environment.home | default('/var/www/html') }}"
+        HTTP_HOME: "{{ nextcloud_olafnorge_de_environment.http_home | default('/var/www/html') }}"
+        INSTANCEID: "{{ nextcloud_olafnorge_de_environment.instance_id }}"
+        MAIL_SMTPPASSWORD: "{{ nextcloud_olafnorge_de_environment.mail_smtp_password }}"
+        PASSWORDSALT: "{{ nextcloud_olafnorge_de_environment.password_salt }}"
+        REDIS_HOST: "{{ nextcloud_olafnorge_de_environment.redis_host | default('redis') }}"
+        REDIS_PORT: "{{ nextcloud_olafnorge_de_environment.redis_port | default(6379) }}"
+        SECRET: "{{ nextcloud_olafnorge_de_environment.secret }}"
+      image: "olafnorge/nextcloud:{{ nextcloud_olafnorge_de_version }}"
+      networks: "{{ nextcloud_olafnorge_de_networks }}"
+      volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - /etc/timezone:/etc/timezone:ro
+    database:
+      deploy:
+        placement:
+          constraints:
+            - node.role != manager
+        replicas: 1
+        restart_policy:
+          condition: on-failure
+          delay: 5s
+          max_attempts: 5
+          window: 300s
+        update_config:
+          failure_action: rollback
+          monitor: 120s
+      environment:
+        - MYSQL_DATABASE={{ nextcloud_olafnorge_de_environment.db_name | default('nextcloud') }}
+        - MYSQL_USER={{ nextcloud_olafnorge_de_environment.db_user | default('nextcloud') }}
+        - MYSQL_PASSWORD{{ '_FILE' if nextcloud_olafnorge_de_use_secrets else '' }}={{ '/run/secrets/' if nextcloud_olafnorge_de_use_secrets else '' }}{{ nextcloud_olafnorge_de_environment.db_password | default('') }}
+        - MYSQL_ROOT_PASSWORD{{ '_FILE' if nextcloud_olafnorge_de_use_secrets else '' }}={{ '/run/secrets/' if nextcloud_olafnorge_de_use_secrets else '' }}{{ nextcloud_olafnorge_de_environment.db_root_password | default('') }}
+      image: mysql:5.7
+      networks:
+        - "{{ nextcloud_olafnorge_de_network_internal }}"
+      volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - /etc/timezone:/etc/timezone:ro
+    redis:
+      deploy:
+        placement:
+          constraints:
+            - node.role != manager
+        replicas: 1
+        restart_policy:
+          condition: on-failure
+          delay: 5s
+          max_attempts: 5
+          window: 300s
+        update_config:
+          failure_action: rollback
+          monitor: 120s
+      image: redis:4-alpine
+      networks:
+        - "{{ nextcloud_olafnorge_de_network_internal }}"
+      volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - /etc/timezone:/etc/timezone:ro
+    xtrabackup:
+      command: cron -f -l -L15
+      configs:
+        - source: "nextcloud-crontab-{{ nextcloud_olafnorge_de_crontab_templated.checksum[:10] }}"
+          target: /etc/cron.d/crontab
+          uid: '0'
+          gid: '0'
+          mode: 0644
+      deploy:
+        placement:
+          constraints:
+            - node.role != manager
+        replicas: 1
+        restart_policy:
+          condition: on-failure
+          delay: 5s
+          max_attempts: 5
+          window: 300s
+        update_config:
+          failure_action: rollback
+          monitor: 120s
+      image: olafnorge/xtrabackup:2.4
+      networks:
+        - "{{ nextcloud_olafnorge_de_network_internal }}"
+      volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - /etc/timezone:/etc/timezone:ro
+  networks: "{{ nextcloud_olafnorge_de_network_definitions }}"
+  configs: "{{ nextcloud_olafnorge_de_config_dict }}"
+
+nextcloud_olafnorge_de_config_path: /root/nextcloud-config.php
+nextcloud_olafnorge_de_crontab_path: "/root/{{ nextcloud_olafnorge_de_name }}-crontab"
+nextcloud_olafnorge_de_labels: []
+nextcloud_olafnorge_de_crons:
+  - interval: '* * * * *'
+    user: root
+    command: echo 'every minute'
+nextcloud_olafnorge_de_name: nextcloudolafnorgede
+nextcloud_olafnorge_de_network_definitions: []
+nextcloud_olafnorge_de_network_internal: internal
+nextcloud_olafnorge_de_networks:
+  - "{{ nextcloud_olafnorge_de_network_internal }}"
+nextcloud_olafnorge_de_use_secrets: yes
+nextcloud_olafnorge_de_version: latest
+
+nextcloud_olafnorge_de_environment:
+  apps_paths:
+    - url: /apps
+      path: /var/www/html/apps
+      writable: no
+    - url: /custom_apps
+      path: /var/www/html/custom_apps
+      writable: yes
+  config_file_path: /nextcloud-config.php
+  config_is_read_only: 'true'
+  db_password: "{{ nextcloud_olafnorge_de_secrets.db_password.name if nextcloud_olafnorge_de_use_secrets else nextcloud_olafnorge_de_db_password }}"
+  db_root_password: "{{ nextcloud_olafnorge_de_secrets.db_root_password.name if nextcloud_olafnorge_de_use_secrets else nextcloud_olafnorge_de_db_root_password }}"
+  instance_id: "{{ nextcloud_olafnorge_de_secrets.instance_id.name if nextcloud_olafnorge_de_use_secrets else nextcloud_olafnorge_de_instance_id }}"
+  log_rotate_size: 10485760
+  mail_domain: example.com
+  mail_from_address: nextcloud
+  mail_smtp_auth: 'true'
+  mail_smtp_authtype: PLAIN
+  mail_smtp_host: webmail.example.com
+  mail_smtp_mode: smtp
+  mail_smtp_name: nextcloud@example.com
+  mail_smtp_password: "{{ nextcloud_olafnorge_de_secrets.mail_smtp_password.name if nextcloud_olafnorge_de_use_secrets else nextcloud_olafnorge_de_mail_smtp_password }}"
+  mail_smtp_port: 465
+  mail_smtp_secure: ssl
+  memcache_distributed: \\OC\\Memcache\\Redis
+  memcache_local: \\OC\\Memcache\\APCu
+  memcache_locking: \\OC\\Memcache\\Redis
+  overwrite_cli_url: https://nextcloud.example.com
+  overwrite_host: nextcloud.example.com
+  overwrite_protocol: https
+  password_salt: "{{ nextcloud_olafnorge_de_secrets.password_salt.name if nextcloud_olafnorge_de_use_secrets else nextcloud_olafnorge_de_password_salt }}"
+  redis:
+    host: redis
+    port: 6379
+  secret: "{{ nextcloud_olafnorge_de_secrets.secret.name if nextcloud_olafnorge_de_use_secrets else nextcloud_olafnorge_de_secret }}"
+  trusted_domains:
+    - nextcloud.example.com
+  trusted_proxies:
+    - '*'
+  updater_release_channel: production
+
+nextcloud_olafnorge_de_secrets:
+  db_password:
+    data: "{{ nextcloud_olafnorge_de_db_password }}"
+    name: nextcloud_olafnorge_de_db_password
+  db_root_password:
+    data: "{{ nextcloud_olafnorge_de_db_root_password }}"
+    name: nextcloud_olafnorge_de_db_root_password
+  instance_id:
+    data: "{{ nextcloud_olafnorge_de_instance_id }}"
+    name: nextcloud_olafnorge_de_instance_id
+  mail_smtp_password:
+    data: "{{ nextcloud_olafnorge_de_mail_smtp_password }}"
+    name: nextcloud_olafnorge_de_mail_smtp_password
+  password_salt:
+    data: "{{ nextcloud_olafnorge_de_password_salt }}"
+    name: nextcloud_olafnorge_de_password_salt
+  secret:
+    data: "{{ nextcloud_olafnorge_de_secret }}"
+    name: nextcloud_olafnorge_de_secret
+
+# vaults, you may define them in a separate file which overrides these defaults
+nextcloud_olafnorge_de_db_password: # FIXME: add your vault here using 'ansible-vault'
+nextcloud_olafnorge_de_db_root_password: # FIXME: add your vault here using 'ansible-vault'
+nextcloud_olafnorge_de_instance_id: # FIXME: add your vault here using 'ansible-vault'
+nextcloud_olafnorge_de_mail_smtp_password: # FIXME: add your vault here using 'ansible-vault'
+nextcloud_olafnorge_de_password_salt: # FIXME: add your vault here using 'ansible-vault'
+nextcloud_olafnorge_de_secret: # FIXME: add your vault here using 'ansible-vault'

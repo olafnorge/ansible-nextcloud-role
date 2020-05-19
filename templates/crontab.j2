@@ -1,0 +1,7 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+{% for crontab_line in nextcloud_olafnorge_de_crons %}
+{{ crontab_line.interval | default('* * * * *') }} {{ crontab_line.user | default('nobody') }} ({{ crontab_line.command | default('echo "missing command"') }}) >> /var/log/cron.log 2>&1
+{% endfor %}
+
